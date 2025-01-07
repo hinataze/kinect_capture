@@ -1,12 +1,15 @@
-output/
-
-# Ignore Visual Studio-related files
+# Ignore Visual Studio files
 .vs/
-*.ipch
 *.db
-
-# Ignore build artifacts
 *.pdb
+*.png
+*.jpg
+*.jpeg
+*.ipch
 *.obj
+*.log
 x64/
-
+Debug/
+Release/
+output/
+hs_kinect/
