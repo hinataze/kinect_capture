@@ -1,0 +1,16 @@
+﻿  hs_kinect.cpp
+C:\dev\vcpkg\installed\x64-windows\include\opencv2\calib3d.hpp(1,1): warning C4819: The file contains a character that cannot be represented in the current code page (932). Save the file in Unicode format to prevent data loss
+  (compiling source file 'hs_kinect.cpp')
+  
+C:\dev\vcpkg\installed\x64-windows\include\Eigen\src\Core\arch\Default\Half.h(1,1): warning C4819: The file contains a character that cannot be represented in the current code page (932). Save the file in Unicode format to prevent data loss
+  (compiling source file 'hs_kinect.cpp')
+  
+C:\dev\vcpkg\installed\x64-windows\include\Eigen\src\Core\arch\Default\BFloat16.h(1,1): warning C4819: The file contains a character that cannot be represented in the current code page (932). Save the file in Unicode format to prevent data loss
+  (compiling source file 'hs_kinect.cpp')
+  
+C:\dev\vcpkg\installed\x64-windows\include\Eigen\src\Core\arch\Default\GenericPacketMathFunctions.h(676,1): warning C4819: The file contains a character that cannot be represented in the current code page (932). Save the file in Unicode format to prevent data loss
+  (compiling source file 'hs_kinect.cpp')
+  
+  hs_kinect.vcxproj -> C:\Users\hermenegildo\99_PROJECTS\hs_kinect\x64\Debug\hs_kinect.exe
+  'pwsh.exe' は、内部コマンドまたは外部コマンド、
+  操作可能なプログラムまたはバッチ ファイルとして認識されていません。
