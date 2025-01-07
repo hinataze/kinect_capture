@@ -8,7 +8,6 @@
 *.ipch
 *.obj
 *.log
-x64/
 Debug/
 Release/
 output/
