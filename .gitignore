@@ -1,0 +1,12 @@
+output/
+
+# Ignore Visual Studio-related files
+.vs/
+*.ipch
+*.db
+
+# Ignore build artifacts
+*.pdb
+*.obj
+x64/
+
