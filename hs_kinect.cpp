@@ -136,196 +136,338 @@ k4a_float3_t get_origin_point(k4a::calibration calibration)
 }
 
 
+// CHANGES FOR MEMORY MANAGMENT 
+class K4ACaptureWrapper
+{
+public:
+    // Construct from a raw k4a_capture_t
+    explicit K4ACaptureWrapper(k4a_capture_t capture = nullptr)
+        : capture_(capture)
+    {
+    }
+
+    // No copy allowed (to prevent double-free)
+    K4ACaptureWrapper(const K4ACaptureWrapper&) = delete;
+    K4ACaptureWrapper& operator=(const K4ACaptureWrapper&) = delete;
+
+    // Allow move
+    K4ACaptureWrapper(K4ACaptureWrapper&& other) noexcept
+        : capture_(other.capture_)
+    {
+        other.capture_ = nullptr;
+    }
+    K4ACaptureWrapper& operator=(K4ACaptureWrapper&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+            capture_ = other.capture_;
+            other.capture_ = nullptr;
+        }
+        return *this;
+    }
+
+    // Destructor releases the capture if valid
+    ~K4ACaptureWrapper()
+    {
+        release();
+    }
+
+    // Explicit release
+    void release()
+    {
+        if (capture_)
+        {
+            k4a_capture_release(capture_);
+            capture_ = nullptr;
+        }
+    }
+
+    // Access the raw handle
+    k4a_capture_t handle() const { return capture_; }
+
+    // Check validity
+    bool isValid() const { return (capture_ != nullptr); }
+
+private:
+    k4a_capture_t capture_ = nullptr;
+};
+
+
 
 bool toggle = true;
 
-
-int main() {
-    // Allocate resources
+int main()
+{
     const int32_t TIMEOUT_IN_MS = 10000;
     uint32_t device_count = 0;
 
-    std::vector<k4a_device_t> devices;
-    std::vector<k4a_transformation_t> transformations;
-    std::vector<k4a::calibration> calibrations;
+    // Vectors for devices, transformations, and calibrations
+    std::vector<k4a_device_t>          devices;
+    std::vector<k4a_transformation_t>  transformations;
+    std::vector<k4a::calibration>      calibrations;
 
-    try {
+    try
+    {
         std::cout << "Starting capture functions" << std::endl;
 
         // Get the number of connected devices
         device_count = k4a_device_get_installed_count();
-
-        if (device_count == 0) {
-            printf("No K4A devices found\n");
+        if (device_count == 0)
+        {
+            std::cerr << "No K4A devices found\n";
             return 0;
         }
 
+        // Reserve space to avoid repeated allocations
+        devices.reserve(device_count);
+        transformations.reserve(device_count);
+        calibrations.reserve(device_count);
+
         // Open and configure each device
-        for (uint32_t i = 0; i < device_count; ++i) {
-            k4a_device_t device;
-            if (K4A_RESULT_SUCCEEDED != k4a_device_open(i, &device)) {
-                printf("Failed to open device %d\n", i);
+        for (uint32_t i = 0; i < device_count; ++i)
+        {
+            k4a_device_t device = nullptr;
+            if (K4A_RESULT_SUCCEEDED != k4a_device_open(i, &device))
+            {
+                std::cerr << "Failed to open device " << i << "\n";
                 continue;
             }
             devices.push_back(device);
 
+            // Configure the device
             k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
             config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
             config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
             config.depth_mode = K4A_DEPTH_MODE_WFOV_UNBINNED;
             config.camera_fps = K4A_FRAMES_PER_SECOND_15;
-            config.synchronized_images_only = true ;
+            config.synchronized_images_only = true;
 
-            k4a::calibration calibration;
-            if (K4A_RESULT_SUCCEEDED != k4a_device_get_calibration(device, config.depth_mode, config.color_resolution, &calibration)) {
-                printf("Failed to get calibration for device %d\n", i);
+            // Get calibration
+            k4a::calibration calib;
+            if (K4A_RESULT_SUCCEEDED !=
+                k4a_device_get_calibration(device,
+                    config.depth_mode,
+                    config.color_resolution,
+                    &calib))
+            {
+                std::cerr << "Failed to get calibration for device " << i << "\n";
                 k4a_device_close(device);
                 continue;
             }
-            calibrations.push_back(calibration);
+            calibrations.push_back(calib);
 
-            k4a_transformation_t transformation = k4a_transformation_create(&calibration);
+            // Create transformation
+            k4a_transformation_t transformation = k4a_transformation_create(&calib);
             transformations.push_back(transformation);
 
-            if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device, &config)) {
-                printf("Failed to start cameras for device %d\n", i);
+            // Start cameras
+            if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device, &config))
+            {
+                std::cerr << "Failed to start cameras for device " << i << "\n";
                 k4a_device_close(device);
                 continue;
             }
 
-            printf("Device %d cameras started\n", i);
+            std::cout << "Device " << i << " cameras started\n";
         }
 
-        if (devices.empty()) {
-            printf("No devices successfully started\n");
+        if (devices.empty())
+        {
+            std::cerr << "No devices successfully started\n";
             return 1;
         }
 
-        // Vectors to store images for each device
+        // Prepare OpenCV Mat vectors (size = number of valid devices)
         std::vector<cv::Mat> colorMats(devices.size());
         std::vector<cv::Mat> depthMats(devices.size());
 
         // Create OpenCV windows for each device
-        for (size_t i = 0; i < devices.size(); ++i) {
+        for (size_t i = 0; i < devices.size(); ++i)
+        {
             cv::namedWindow("Device " + std::to_string(i) + " - Color Image", cv::WINDOW_NORMAL);
         }
 
         bool toggle = true;
 
-
-        std::vector<k4a::image> lastDepthImages(devices.size());
-        std::vector<k4a::image> lastColorImages(devices.size());
-        std::vector<k4a_capture_t> lastCaptures(devices.size(), nullptr);
+        // Store k4a::image wrappers and captures
+        std::vector<k4a::image>      lastDepthImages(devices.size());
+        std::vector<k4a::image>      lastColorImages(devices.size());
+        std::vector<K4ACaptureWrapper> lastCaptures(devices.size());
 
         // Main capture loop
-        while (true) {
-            for (size_t i = 0; i < devices.size(); ++i) {
+        while (true)
+        {
+            for (size_t i = 0; i < devices.size(); ++i)
+            {
+                if (!devices[i]) // in case a device failed earlier
+                    continue;
 
-                k4a_capture_t capture;
-                switch (k4a_device_get_capture(devices[i], &capture, TIMEOUT_IN_MS)) {
-                case K4A_WAIT_RESULT_SUCCEEDED:
-                    // Update the last valid capture
-                    if (lastCaptures[i] != nullptr) {
-                        k4a_capture_release(lastCaptures[i]); // Release the previous capture
-                    }
-                    lastCaptures[i] = capture; // Store the new valid capture
-                    break;
-                case K4A_WAIT_RESULT_TIMEOUT:
+                // Attempt to get a capture
+                k4a_capture_t rawCapture = nullptr;
+                k4a_wait_result_t result = k4a_device_get_capture(
+                    devices[i], &rawCapture, TIMEOUT_IN_MS);
+
+                if (result == K4A_WAIT_RESULT_SUCCEEDED)
+                {
+                    // Release the old capture before overwriting
+                    lastCaptures[i].release();
+
+                    // Store the new valid capture in the RAII wrapper
+                    lastCaptures[i] = K4ACaptureWrapper(rawCapture);
+                }
+                else if (result == K4A_WAIT_RESULT_TIMEOUT)
+                {
                     std::cerr << "Device " << i << " timed out waiting for a capture\n";
                     continue;
-                case K4A_WAIT_RESULT_FAILED:
+                }
+                else // K4A_WAIT_RESULT_FAILED
+                {
                     std::cerr << "Device " << i << " failed to get a capture\n";
                     continue;
                 }
 
                 // Process depth and color images
-                k4a::image depthImage = k4a_capture_get_depth_image(capture);
-                k4a::image colorImage = k4a_capture_get_color_image(capture);
+                if (lastCaptures[i].isValid())
+                {
+                    // Wrap them in k4a::image (C++ wrapper)
+                    k4a::image depthImage = k4a_capture_get_depth_image(lastCaptures[i].handle());
+                    k4a::image colorImage = k4a_capture_get_color_image(lastCaptures[i].handle());
 
-                if (depthImage.is_valid() && colorImage.is_valid()) {
+                    if (depthImage.is_valid() && colorImage.is_valid())
+                    {
+                        // Store for later usage
+                        lastDepthImages[i] = depthImage;
+                        lastColorImages[i] = colorImage;
 
-                    lastDepthImages[i] = depthImage;
-                    lastColorImages[i] = colorImage;
+                        // Clone buffers into cv::Mat to avoid referencing
+                        // Kinect memory that may be freed
+                        colorMats[i] = cv::Mat(
+                            colorImage.get_height_pixels(),
+                            colorImage.get_width_pixels(),
+                            CV_8UC4,
+                            colorImage.get_buffer()
+                        ).clone();
 
-                    colorMats[i] = cv::Mat(colorImage.get_height_pixels(), colorImage.get_width_pixels(), CV_8UC4, colorImage.get_buffer());
-                    depthMats[i] = cv::Mat(depthImage.get_height_pixels(), depthImage.get_width_pixels(), CV_16UC1, (void*)depthImage.get_buffer());
+                        depthMats[i] = cv::Mat(
+                            depthImage.get_height_pixels(),
+                            depthImage.get_width_pixels(),
+                            CV_16UC1,
+                            depthImage.get_buffer()
+                        ).clone();
 
-
-                    if (toggle) {
-                        cv::imshow("Device " + std::to_string(i) + " - Color Image", colorMats[i]);
-                    }
-                    else {
-                        cv::imshow("Device " + std::to_string(i) + " - Depth Image", depthMats[i]);
+                        if (toggle)
+                        {
+                            cv::imshow("Device " + std::to_string(i) + " - Color Image", colorMats[i]);
+                        }
+                        else
+                        {
+                            cv::imshow("Device " + std::to_string(i) + " - Depth Image", depthMats[i]);
+                        }
                     }
                 }
-
-                k4a_capture_release(capture);
             }
-
-
 
             // Check for key input
-            char key = cv::waitKey(1);
-            if (key == 'q') {
+            char key = static_cast<char>(cv::waitKey(1));
+            if (key == 'q')
+            {
                 break;
             }
-            else if (key == 's') {
-                for (size_t i = 0; i < devices.size(); ++i) {
-                    if (!colorMats[i].empty()) {
-
-                        std::string pathcolorimg = path + "device_" + std::to_string(i) + "_color" + yymmddhhmmss() + ".png";
-
-                        cv::imwrite(pathcolorimg, colorMats[i]);
-                        std::cout << "Device " << i << " color image saved to" + pathcolorimg+ "\n";
+            else if (key == 's')
+            {
+                for (size_t i = 0; i < devices.size(); ++i)
+                {
+                    // Save color image
+                    if (!colorMats[i].empty())
+                    {
+                        std::string pathColorImg = path + "device_" +
+                            std::to_string(i) + "_color_" + yymmddhhmmss() + ".png";
+                        if (cv::imwrite(pathColorImg, colorMats[i]))
+                        {
+                            std::cout << "Device " << i
+                                << " color image saved to " << pathColorImg << "\n";
+                        }
                     }
-                    if (!depthMats[i].empty()) {
-                        std::string pathdepthimg = path + "device_" + std::to_string(i) + "_depth" + yymmddhhmmss() + ".png";
-                        cv::imwrite(pathdepthimg, depthMats[i]);
-                        std::cout << "Device " << i << " depth image saved to" + pathdepthimg +"\n";
+                    // Save depth image
+                    if (!depthMats[i].empty())
+                    {
+                        std::string pathDepthImg = path + "device_" +
+                            std::to_string(i) + "_depth_" + yymmddhhmmss() + ".png";
+                        if (cv::imwrite(pathDepthImg, depthMats[i]))
+                        {
+                            std::cout << "Device " << i
+                                << " depth image saved to " << pathDepthImg << "\n";
+                        }
                     }
-                
+
                     // Generate unique point cloud file name
-                    std::string pathply = path + "device_" + std::to_string(i) + "_" + yymmddhhmmss();
+                    std::string pathPointCloud = path + "device_" +
+                        std::to_string(i) + "_" + yymmddhhmmss();
 
                     // Call f_capture to save point clouds
-                    if (depthMats[i].empty() || colorMats[i].empty()) {
-                        std::cerr << "Device " << i << ": Skipping point cloud generation due to missing data.\n";
+                    if (depthMats[i].empty() || colorMats[i].empty())
+                    {
+                        std::cerr << "Device " << i
+                            << ": Skipping point cloud generation due to missing data.\n";
+                        continue;
                     }
-                    
-                    try {
+
+                    // Make sure we have valid images & captures
+                    if (!lastDepthImages[i].is_valid() ||
+                        !lastColorImages[i].is_valid() ||
+                        !lastCaptures[i].isValid())
+                    {
+                        std::cerr << "Device " << i
+                            << ": Missing valid depth/color/capture.\n";
+                        continue;
+                    }
+
+                    try
+                    {
                         f_capture(
-                            pathply,
-                            lastDepthImages[i].handle(),        // Pass the raw handle
-                            lastColorImages[i].handle(),        // Pass the raw handle
-                            transformations[i],         // Transformation for the device
-                            calibrations[i],            // Calibration for the device
-                            lastCaptures[i]                     // Capture object for the device
+                            pathPointCloud,
+                            lastDepthImages[i].handle(),   // Pass the raw handle
+                            lastColorImages[i].handle(),   // Pass the raw handle
+                            transformations[i],            // Transformation for the device
+                            calibrations[i],               // Calibration for the device
+                            lastCaptures[i].handle()       // Capture object for the device
                         );
                         std::cout << "Device " << i << " point cloud saved.\n";
                     }
-                    catch (const std::exception& e) {
-                        std::cerr << "Device " << i << ": Error saving point cloud - " << e.what() << "\n";
+                    catch (const std::exception& e)
+                    {
+                        std::cerr << "Device " << i
+                            << ": Error saving point cloud - " << e.what() << "\n";
                     }
-                
                 }
             }
-            else if (key == 't') {
+            else if (key == 't')
+            {
                 toggle = !toggle;
             }
         }
     }
-    catch (const k4a::error& e) {
+    catch (const k4a::error& e)
+    {
         std::cerr << "Azure Kinect error: " << e.what() << std::endl;
         return 1;
     }
 
-    // Free resources
-    for (size_t i = 0; i < devices.size(); ++i) {
-        if (transformations[i] != NULL) {
+    //--------------------------------------------------------------------------
+    // Cleanup resources
+    //--------------------------------------------------------------------------
+    for (size_t i = 0; i < devices.size(); ++i)
+    {
+        if (transformations[i] != nullptr)
+        {
             k4a_transformation_destroy(transformations[i]);
+            transformations[i] = nullptr;
         }
-        if (devices[i] != NULL) {
+        if (devices[i] != nullptr)
+        {
             k4a_device_close(devices[i]);
+            devices[i] = nullptr;
         }
     }
 

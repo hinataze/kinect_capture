@@ -8,7 +8,7 @@
 *.ipch
 *.obj
 *.log
-Debug/
+#Debug/
 Release/
 output/
 hs_kinect/
