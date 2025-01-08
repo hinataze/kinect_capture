@@ -12,4 +12,4 @@
 
 
 
-int f_capture(std::string output_dir, std::string pathdate, k4a_image_t depth_image, k4a_image_t color_image, k4a_transformation_t transformation, k4a_calibration_t calibration, k4a_capture_t capture);
+int f_capture(std::string output_dir, k4a_image_t depth_image, k4a_image_t color_image, k4a_transformation_t transformation, k4a_calibration_t calibration, k4a_capture_t capture);

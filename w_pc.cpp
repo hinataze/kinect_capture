@@ -4,10 +4,7 @@
 
 
 
-static bool point_cloud_color_to_depth(k4a_transformation_t transformation_handle,
-                                       const k4a_image_t depth_image,
-                                       const k4a_image_t color_image,
-                                       std::string file_name)
+static bool point_cloud_color_to_depth (k4a_transformation_t transformation_handle, const k4a_image_t depth_image, const k4a_image_t color_image,std::string file_name)
 {
     std::cout << "point_cloud_color_to_depth  " << std::endl;
     int depth_image_width_pixels = k4a_image_get_width_pixels(depth_image);
@@ -61,9 +58,8 @@ static bool point_cloud_color_to_depth(k4a_transformation_t transformation_handl
     return true;
 }
 
-static bool point_cloud_depth_to_color(k4a_transformation_t transformation_handle,
-    const k4a_image_t depth_image,
-    const k4a_image_t color_image,
+static bool point_cloud_depth_to_color(k4a_transformation_t transformation_handle, const k4a_image_t depth_image,
+const k4a_image_t color_image,
     std::string file_name)
 {
     // transform color image into depth camera geometry
@@ -119,7 +115,7 @@ static bool point_cloud_depth_to_color(k4a_transformation_t transformation_handl
 
 
 //static int f_capture(std::string output_dir, uint8_t deviceId = K4A_DEVICE_DEFAULT)
- int f_capture(std::string output_dir, std::string pathdate, k4a_image_t depth_image , k4a_image_t color_image , k4a_transformation_t transformation, k4a_calibration_t calibration, k4a_capture_t capture)
+ int f_capture(std::string output_dir, k4a_image_t depth_image , k4a_image_t color_image , k4a_transformation_t transformation, k4a_calibration_t calibration, k4a_capture_t capture)
 {
    int returnCode = 1;
 
@@ -130,22 +126,19 @@ static bool point_cloud_depth_to_color(k4a_transformation_t transformation_handl
    k4a_image_t color_image_downscaled = NULL;
  
     // Compute color point cloud by warping color image into depth camera geometry
-#ifdef _WIN32
-    file_name = output_dir + "\\point_cloud_color_to_depth" + pathdate;
-#else
-    file_name = output_dir + "/point_cloud_color_to_depth" + pathdate;
-#endif
+
+    file_name = output_dir + "_point_cloud_color_to_depth.ply";
+    std::cout << "file_name " <<  file_name << std::endl;
+
     if (point_cloud_color_to_depth(transformation, depth_image, color_image, file_name.c_str()) == false)
     {
         goto Exit;
     }
 
     // Compute color point cloud by warping depth image into color camera geometry
-#ifdef _WIN32
-    file_name = output_dir + "\\point_cloud_depth_to_color" + pathdate;
-#else
-    file_name = output_dir + "/point_cloud_depth_to_color" + pathdate;
-#endif
+    file_name = output_dir + "_point_cloud_depth_to_color.ply";
+    std::cout << "file_name " << file_name << std::endl;
+
     if (point_cloud_depth_to_color(transformation, depth_image, color_image, file_name.c_str()) == false)
     {
         goto Exit;
@@ -174,11 +167,9 @@ static bool point_cloud_depth_to_color(k4a_transformation_t transformation_handl
         goto Exit;
     }
 
-#ifdef _WIN32
-    file_name = output_dir + "\\point_cloud_depth_to_color_downscaled" + pathdate;
-#else
-    file_name = output_dir + "/point_cloud_depth_to_color_downscaled.ply";
-#endif
+    file_name = output_dir + "point_cloud_depth_to_color_downscaled.ply";
+    std::cout << "file_name " << file_name << std::endl;
+
     if (point_cloud_depth_to_color(transformation_color_downscaled,
         depth_image,
         color_image_downscaled,

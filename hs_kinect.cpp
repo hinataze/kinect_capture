@@ -7,18 +7,21 @@
 #include <ctime>
 #include <chrono>
 
+
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/io/ply_io.h>
 
 #include <w_pc.h>
 
-
-
-std::string path = "C:/Users/hermenegildo/99_PROJECTS/hs_kinect/output/";
+#include <boost/filesystem.hpp>
 
 
 
+std::string path = boost::filesystem::current_path().string() + "\\output\\";
+
+ 
 std::string yymmddhhmmss()
 {
     auto currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -64,7 +67,6 @@ void saveDepthImage (k4a::image colorImage, k4a::image depthImage, cv::Mat color
 
          if (colorImage.is_valid() && depthImage.is_valid() && depthImage.get_size() > 0)
          {
-         
              // Retrieve image properties
              int colorWidth = colorImage.get_width_pixels();
              int colorHeight = colorImage.get_height_pixels();
@@ -262,8 +264,6 @@ int main() {
 
 
 
-
-
             // Check for key input
             char key = cv::waitKey(1);
             if (key == 'q') {
@@ -272,16 +272,20 @@ int main() {
             else if (key == 's') {
                 for (size_t i = 0; i < devices.size(); ++i) {
                     if (!colorMats[i].empty()) {
-                        cv::imwrite(path + "device_" + std::to_string(i) + "_color.png", colorMats[i]);
-                        std::cout << "Device " << i << " color image saved.\n";
+
+                        std::string pathcolorimg = path + "device_" + std::to_string(i) + "_color" + yymmddhhmmss() + ".png";
+
+                        cv::imwrite(pathcolorimg, colorMats[i]);
+                        std::cout << "Device " << i << " color image saved to" + pathcolorimg+ "\n";
                     }
                     if (!depthMats[i].empty()) {
-                        cv::imwrite(path + "device_" + std::to_string(i) + "_depth.png", depthMats[i]);
-                        std::cout << "Device " << i << " depth image saved.\n";
+                        std::string pathdepthimg = path + "device_" + std::to_string(i) + "_depth" + yymmddhhmmss() + ".png";
+                        cv::imwrite(pathdepthimg, depthMats[i]);
+                        std::cout << "Device " << i << " depth image saved to" + pathdepthimg +"\n";
                     }
                 
                     // Generate unique point cloud file name
-                    std::string plyFileName = "device_" + std::to_string(i) + "_" + yymmddhhmmss() + ".ply";
+                    std::string pathply = path + "device_" + std::to_string(i) + "_" + yymmddhhmmss();
 
                     // Call f_capture to save point clouds
                     if (depthMats[i].empty() || colorMats[i].empty()) {
@@ -290,25 +294,18 @@ int main() {
                     
                     try {
                         f_capture(
-                            path.c_str(),
-                            plyFileName,
+                            pathply,
                             lastDepthImages[i].handle(),        // Pass the raw handle
                             lastColorImages[i].handle(),        // Pass the raw handle
                             transformations[i],         // Transformation for the device
                             calibrations[i],            // Calibration for the device
                             lastCaptures[i]                     // Capture object for the device
                         );
-                        std::cout << "Device " << i << " point cloud saved as " << plyFileName << ".\n";
+                        std::cout << "Device " << i << " point cloud saved.\n";
                     }
                     catch (const std::exception& e) {
                         std::cerr << "Device " << i << ": Error saving point cloud - " << e.what() << "\n";
                     }
-                
-                
-                   
-
-
-
                 
                 }
             }
