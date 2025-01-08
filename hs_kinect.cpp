@@ -193,8 +193,6 @@ private:
     k4a_capture_t capture_ = nullptr;
 };
 
-
-
 bool toggle = true;
 
 int main()
@@ -210,7 +208,6 @@ int main()
     try
     {
         std::cout << "Starting capture functions" << std::endl;
-
         // Get the number of connected devices
         device_count = k4a_device_get_installed_count();
         if (device_count == 0)
@@ -268,7 +265,6 @@ int main()
                 k4a_device_close(device);
                 continue;
             }
-
             std::cout << "Device " << i << " cameras started\n";
         }
 
@@ -285,7 +281,7 @@ int main()
         // Create OpenCV windows for each device
         for (size_t i = 0; i < devices.size(); ++i)
         {
-            cv::namedWindow("Device " + std::to_string(i) + " - Color Image", cv::WINDOW_NORMAL);
+           cv::namedWindow("Device " + std::to_string(i) + " - Color Image", cv::WINDOW_NORMAL);
         }
 
         bool toggle = true;
@@ -294,6 +290,8 @@ int main()
         std::vector<k4a::image>      lastDepthImages(devices.size());
         std::vector<k4a::image>      lastColorImages(devices.size());
         std::vector<K4ACaptureWrapper> lastCaptures(devices.size());
+
+
 
         // Main capture loop
         while (true)
@@ -356,13 +354,18 @@ int main()
                             depthImage.get_buffer()
                         ).clone();
 
+                        cv::Mat displayColor, displayDepth;
+                        cv::resize(colorMats[i], displayColor, cv::Size(), 0.5, 0.5, cv::INTER_AREA);
+                        cv::resize(depthMats[i], displayDepth, cv::Size(), 0.5, 0.5, cv::INTER_NEAREST);
+
+
                         if (toggle)
                         {
-                            cv::imshow("Device " + std::to_string(i) + " - Color Image", colorMats[i]);
+                            cv::imshow("Device " + std::to_string(i) + " - Color Image", displayColor);
                         }
                         else
                         {
-                            cv::imshow("Device " + std::to_string(i) + " - Depth Image", depthMats[i]);
+                            cv::imshow("Device " + std::to_string(i) + " - Depth Image", displayDepth);
                         }
                     }
                 }
