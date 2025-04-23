@@ -216,14 +216,57 @@ int main()
             return 0;
         }
 
-        // Reserve space to avoid repeated allocations
-        devices.reserve(device_count);
-        transformations.reserve(device_count);
-        calibrations.reserve(device_count);
 
-        // Open and configure each device
+
+        // Struct to hold device index and serial
+        struct DeviceInfo {
+            uint32_t index;
+            std::string serial;
+        };
+
+        std::vector<DeviceInfo> sortedDevices;
+
+        // Retrieve serials for all devices
         for (uint32_t i = 0; i < device_count; ++i)
         {
+            k4a_device_t tempDevice = nullptr;
+            if (K4A_RESULT_SUCCEEDED != k4a_device_open(i, &tempDevice))
+            {
+                std::cerr << "Failed to open device " << i << " to read serial\n";
+                continue;
+            }
+
+            size_t serialSize = 0;
+            k4a_device_get_serialnum(tempDevice, nullptr, &serialSize);
+            std::string serial(serialSize, '\0');
+            if (K4A_RESULT_SUCCEEDED == k4a_device_get_serialnum(tempDevice, &serial[0], &serialSize))
+            {
+                serial.resize(serialSize - 1); // remove null terminator
+                sortedDevices.push_back({ i, serial });
+            }
+            else
+            {
+                std::cerr << "Failed to get serial number for device " << i << "\n";
+            }
+
+            k4a_device_close(tempDevice);
+        }
+
+        // Sort by serial number
+        std::sort(sortedDevices.begin(), sortedDevices.end(),
+            [](const DeviceInfo& a, const DeviceInfo& b) {
+                return a.serial < b.serial;
+            });
+
+        // Reserve space based on sorted list
+        devices.reserve(sortedDevices.size());
+        transformations.reserve(sortedDevices.size());
+        calibrations.reserve(sortedDevices.size());
+
+        // Open devices in serial order
+        for (const auto& devInfo : sortedDevices)
+        {
+            uint32_t i = devInfo.index;
             k4a_device_t device = nullptr;
             if (K4A_RESULT_SUCCEEDED != k4a_device_open(i, &device))
             {
@@ -232,7 +275,6 @@ int main()
             }
             devices.push_back(device);
 
-            // Configure the device
             k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
             config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
             config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
@@ -240,7 +282,6 @@ int main()
             config.camera_fps = K4A_FRAMES_PER_SECOND_15;
             config.synchronized_images_only = true;
 
-            // Get calibration
             k4a::calibration calib;
             if (K4A_RESULT_SUCCEEDED !=
                 k4a_device_get_calibration(device,
@@ -254,20 +295,23 @@ int main()
             }
             calibrations.push_back(calib);
 
-            // Create transformation
             k4a_transformation_t transformation = k4a_transformation_create(&calib);
             transformations.push_back(transformation);
 
-            // Start cameras
             if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device, &config))
             {
                 std::cerr << "Failed to start cameras for device " << i << "\n";
                 k4a_device_close(device);
                 continue;
             }
-            std::cout << "Device " << i << " cameras started\n";
+
+            std::cout << "Device index " << i
+                << " with serial " << devInfo.serial
+                << " initialized successfully\n";
         }
 
+
+       
         if (devices.empty())
         {
             std::cerr << "No devices successfully started\n";
